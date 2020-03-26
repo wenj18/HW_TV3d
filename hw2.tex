@@ -14,11 +14,11 @@ in} \setlength{\textwidth}{7 in} \setlength{\textheight}{8.5 in}
 \begin{document}
 \section{Project 1}
 \subsection{PDE}
-We get a parabolic equation because of the gradient descent flow 
+We get a parabolic equation because of the gradient descent flow
 \begin{equation}\label{equ:paowu}
   \left\{
   \begin{split}
-    &\dfrac{\partial u}{\partial t}=div\left (\dfrac{\nabla u}{\varphi(|\nabla u|)}\right)-\lambda^*(u-f) \\
+    &\dfrac{\partial u}{\partial t}=div\left (\dfrac{\nabla u}{\sqrt{u_x'^2+u_y'^2+u_z'^2+\epsilon}}\right)-\lambda^*(u-f) \\
     &\left. \dfrac{\partial u}{\partial \overrightarrow{n}} \right | _{\partial \Omega} =0\\
     &u(x,0)=f
   \end{split}
@@ -56,7 +56,7 @@ Data distribution:
     ...
     # Adding Gaussian noise
     ...
-    # Data distribution 
+    # Data distribution
     nimgsile = nimg[:,:,0:101]
     sendbuf = nimg[:,:,99:200].copy()
     comm.Send(sendbuf, dest=1, tag=11)
@@ -119,7 +119,7 @@ def worker(In, J, dt, lam):
   DivJx=DfJx/TempDJ
   DivJy=DfJy/TempDJ
   DivJz=DfJz/TempDJ
-  
+
   Div=bdx(DivJx,m)+bdy(DivJy,n)+bdz(DivJz,l)
   J += dt * Div -dt*lam*(J-In)
   return J
