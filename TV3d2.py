@@ -1,3 +1,4 @@
+#echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
 import numpy as np
 
 	
@@ -125,10 +126,16 @@ if __name__ == '__main__':
     recbuf = np.empty([200,200,100],np.float64)
     comm.Recv(recbuf, source=1, tag=20)
     deimg[:,:,100:200] = recbuf
-    del recbuf  	
+    del recbuf  
+    plt.figure()
+    plt.imshow(deimg[100,:,:],"gray")
+    plt.savefig('./deimg100x.png')		
     plt.figure()
     plt.imshow(deimg[:,100,:],"gray")
-    plt.savefig('./result.png')	
+    plt.savefig('./deimg100y.png')	
+    plt.figure()
+    plt.imshow(deimg[:,:,100],"gray")
+    plt.savefig('./deimg100z.png')	
   else:
     sendbuf = J[:,:,1:101].copy()
     comm.Send(sendbuf, dest=0, tag=20)  
