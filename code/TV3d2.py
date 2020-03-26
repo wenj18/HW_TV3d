@@ -83,9 +83,9 @@ if __name__ == '__main__':
   else: 
     nimgsile = np.empty([200,200,101],dtype=np.float64) 
     comm.Recv(nimgsile, source=0, tag=11)
-    plt.figure()
-    plt.imshow(nimgsile[:,100,:],"gray")
-    plt.savefig('./nimgsile1.png')	
+    # plt.figure()
+    # plt.imshow(nimgsile[:,100,:],"gray")
+    # plt.savefig('./nimgsile1.png')	
 
   # Iterative
   J = nimgsile.copy()
@@ -93,8 +93,10 @@ if __name__ == '__main__':
   for t in range(T):
     if rank ==0 and not t%5:
       print(t, 'of ', T)
+    # In-process computation
     J = worker(nimgsile, J, dt, lam)
     #print('good work', rank )	
+    # Blocking communication
     if rank == 0:
       sendbuf = J[:,:,n2-2].copy()
       #print('begin send of', rank )	  

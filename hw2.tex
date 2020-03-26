@@ -1,0 +1,177 @@
+\documentclass{article}
+\usepackage{mathrsfs}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{pythonhighlight}
+\setlength{\oddsidemargin}{-0.25 in}
+\setlength{\evensidemargin}{-0.25 in} \setlength{\topmargin}{-0.25
+in} \setlength{\textwidth}{7 in} \setlength{\textheight}{8.5 in}
+\setlength{\headsep}{0.25 in} \setlength{\parindent}{0 in}
+\setlength{\parskip}{0.1 in}
+\begin{document}
+\section{Project 1}
+\subsection{PDE}
+We get a parabolic equation because of the gradient descent flow 
+\begin{equation}\label{equ:paowu}
+  \left\{
+  \begin{split}
+    &\dfrac{\partial u}{\partial t}=div\left (\dfrac{\nabla u}{\varphi(|\nabla u|)}\right)-\lambda^*(u-f) \\
+    &\left. \dfrac{\partial u}{\partial \overrightarrow{n}} \right | _{\partial \Omega} =0\\
+    &u(x,0)=f
+  \end{split}
+  \right.
+\end{equation}
+
+
+\subsection{Numerical format}
+For convenience of writing, we define
+\begin{equation*}
+  \begin{array}{c}
+      D_x^{\pm}(u_{i,j}) \triangleq \pm (u_{i\pm1,j,k}-u_{i,j,k}),\\
+   \end{array}
+\end{equation*}
+We proposed a numerical approximation of $|\nabla u|$
+\begin{equation*}
+  \begin{array}{c}
+    |\nabla u|\approx  |D_h(u_{i,j,k}^n| =  \sqrt{D_x ^+ (u_{i,j,k})^2+D_y^+(u_{i,j,k})^2+D_z^+(u_{i,j,k})^2+\varepsilon}\\
+  \end{array}
+\end{equation*}
+And then, we have
+\begin{equation}\label{equ:div1}
+  div\left (\frac{\nabla u}{|\nabla u|}\right) \approx D_x^-\left(\frac{D_x^+(u_{i,j,k}^n)}{|D_h(u_{i,j,k}^n)|}\right)+D_y^-
+  \left(\frac{D_y^+(u_{i,j,k}^n)}{|D_h(u_{i,j,k})^n)|}\right) \triangleq z_{i,j,k}^n
+\end{equation}
+In addition, we discrete time using forward Euler using forward Euler method. Therefore, the numerical format of parabolic equation \eqref{equ:paowu} is obtained as follow
+\begin{equation}\label{equ:shuzhi1}
+  u_{i,j,k}^{n+1}=u_{i,j,k}^n +\tau z_{i,j,k}^n-\tau \lambda (u_{i,j,k}^n-u_{i,j,k}^0),\ \ \ \text{where }\tau = t^{n+1}-t^n.
+\end{equation}
+\subsection{Distribution and communication}
+Data distribution:
+\begin{python}
+  if rank == 0:
+    # Generate image
+    ...
+    # Adding Gaussian noise
+    ...
+    # Data distribution 
+    nimgsile = nimg[:,:,0:101]
+    sendbuf = nimg[:,:,99:200].copy()
+    comm.Send(sendbuf, dest=1, tag=11)
+    del nimg, sendbuf
+  else:
+    nimgsile = np.empty([200,200,101],dtype=np.float64)
+    comm.Recv(nimgsile, source=0, tag=11)
+\end{python}
+
+Communication:
+\begin{python}
+  for t in range(T):
+    if rank ==0 and not t%5:
+      print(t, 'of ', T)
+    # In-process computation
+    J = worker(nimgsile, J, dt, lam)
+    # Blocking communication
+    if rank == 0:
+      # rank 0: send before recv
+      sendbuf = J[:,:,n2-2].copy()
+      comm.Send(sendbuf, dest=1, tag=100)
+      recbuf = np.empty(J[:,:,n2-1].shape, dtype=J[:,:,n2-1].dtype)	
+      comm.Recv(recbuf, source=1, tag=110)	
+      J[:,:,n2-1] = recbuf
+    else:
+      # rank 1: recv before send
+      recbuf = np.empty(J[:,:,n2-1].shape, dtype=J[:,:,n2-1].dtype)	
+      comm.Recv(recbuf, source=0, tag=100)
+      J[:,:,0] = recbuf	
+      sendbuf = J[:,:,1].copy()	
+      comm.Send(sendbuf, dest=0, tag=110)
+\end{python}
+\begin{figure}[htp]
+\begin{minipage}{0.5\linewidth}
+\centering
+\includegraphics[width=0.9\linewidth]{./img/nimgsile0.png}
+\caption{Process 0}
+\label{fig:1a}
+\end{minipage}%
+\begin{minipage}{0.5\linewidth}
+\centering
+\includegraphics[width=0.9\linewidth]{./img/nimgsile1.png}
+\caption{Process 1}
+\label{fig:1b}
+\end{minipage}
+\end{figure}
+
+\subsection{In-process computation improvement}
+Original: Matrix operations (faster than for) but increased 5 times RAM.
+\begin{python}
+def worker(In, J, dt, lam):
+  ep = 1e-4
+  m,n,l = J.shape
+  # Gradient approximates by forward Euler
+  DfJx=J[list(range(1,m))+[m-1],:,:]-J
+  DfJy=J[:,list(range(1,n))+[n-1],:]-J
+  DfJz=J[:,:,list(range(1,l))+[l-1]]-J
+  # \varphi(\nabla u)
+  TempDJ=(ep+DfJx*DfJx+DfJy*DfJy+DfJz*DfJz)**(1/2)
+  DivJx=DfJx/TempDJ
+  DivJy=DfJy/TempDJ
+  DivJz=DfJz/TempDJ
+  
+  Div=bdx(DivJx,m)+bdy(DivJy,n)+bdz(DivJz,l)
+  J += dt * Div -dt*lam*(J-In)
+  return J
+\end{python}
+
+Improvement: Divided into 8 parts along the x direction, each parts have 25+1 or 25+2 layers. RAM is shown in Figure \ref{fig:2}.
+
+\begin{figure}[htp]
+  \centering
+  % Requires \usepackage{graphicx}
+  \includegraphics[width=0.6\textwidth]{./img/RAM.PNG}\\
+  \caption{RAM Improvement}\label{fig:2}
+\end{figure}
+
+\subsection{Results}
+Results collection and presentation:
+\begin{python}
+  if rank ==0:
+    # Process0 collect data and plt
+    deimg = np.empty([nx,ny,nz], dtype = np.float64)
+    deimg[:,:,0:100] = J[:,:,0:100]
+    recbuf = np.empty([200,200,100],np.float64)
+    comm.Recv(recbuf, source=1, tag=20)
+    deimg[:,:,100:200] = recbuf
+    plt.figure()
+    plt.imshow(deimg[100,:,:],"gray")
+    ...	
+  else:
+    sendbuf = J[:,:,1:101].copy()
+    comm.Send(sendbuf, dest=0, tag=20)
+\end{python}
+Results is shown Figure \ref{fig:3a}-\ref{fig:3c}. (Code see \textbf{TV3d2.py})
+\begin{figure}[htp]
+\begin{minipage}{0.3\linewidth}
+\centering
+\includegraphics[width=0.9\linewidth]{./img/deimg100x.png}
+\caption{y-z Section}
+\label{fig:3a}
+\end{minipage}%
+\begin{minipage}{0.3\linewidth}
+\centering
+\includegraphics[width=0.9\linewidth]{./img/deimg100y.png}
+\caption{x-z Section}
+\label{fig:3b}
+\end{minipage}
+\begin{minipage}{0.3\linewidth}
+\centering
+\includegraphics[width=0.9\linewidth]{./img/deimg100z.png}
+\caption{x-y Section}
+\label{fig:3c}
+\end{minipage}
+\end{figure}
+
+
+\end{document} 
